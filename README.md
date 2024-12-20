@@ -1,0 +1,5 @@
+- [x] Tokenization
+- [x] Expression Parsing
+- [x] Expression evaluation
+- [x] Var parsing
+- [ ] Var evaluation

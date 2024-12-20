@@ -11,8 +11,19 @@ object State {
 }
 
 
+
 case class Parser(tokens: List[lexer.Token]) {
   def tokenAt(state: State) = tokens.lift(state.current)
+
+  def matchAtN[A](state: State, n: Int)(fn: PartialFunction[(List[lexer.Token], State, State), Option[A]]): Option[A] = {
+    val (tokens, (newState, _)) = Util.unfold[Option[lexer.Token], (State, Int)](state -> 0) { case (state, length) =>
+      if (length >= n) None else {
+        Some(tokenAt(state) -> (state.advance, length + 1))
+      }
+    }
+
+    fn.lift((tokens.flatten, state, newState)).flatten
+  }
 
   def primary(state: State): (ParseToken.Unary, State) = {
     val (expr, newState) = tokenAt(state) match {
@@ -171,11 +182,11 @@ case class Parser(tokens: List[lexer.Token]) {
   }
 
   def program(state: State): (ParseToken.Program, State) = {
+
     val (declarations, newState) = Util.unfold[ParseToken.Declaration, State](state) { state =>
-      tokenAt(state) match {
-        case Some(lexer.Token.EOF(_)) => None
-        case Some(_) => Some(declaration(state))
-        case None => None
+      matchAtN(state, 1) {
+        case (List(lexer.Token.EOF(_)), _, _) => None
+        case (_, state, _) => Some(declaration(state))
       }
     }
     ParseToken.Program(declarations) -> newState

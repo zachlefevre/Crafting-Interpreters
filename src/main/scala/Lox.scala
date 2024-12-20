@@ -38,18 +38,12 @@ object Lox extends App {
     scanner.scanTokens match {
       case Left(value) => reportError(value)
       case Right(tokens) =>
-        println(s"tokens:\t\t\t${tokens}")
+        println(s"tokens:\t\t\t${tokens}\n")
 
         val parser = parsing.Parser(tokens)
         val (ast, _) = parser.program(parsing.State.default)
-        println(s"ast:\t\t\t$ast")
-        println()
-        println(s"pretty ast:\t\t${ast.pretty}")
-        println()
-        println(s"ast simplfied:\t\t${ast.simplified}")
-        println()
-        println(s"pretty simplified ast:\t${ast.simplified.pretty}")
-        println()
+        println(s"pretty ast:\t\t${ast.pretty}\n")
+        println(s"pretty simplified ast:\t${ast.simplified.pretty}\n")
 
         val interpreted = interpreting.Interpreter.interpret(ast.simplified) match {
           case Right(value) => s"${Console.GREEN}It Worked!\n$value${Console.RESET}"

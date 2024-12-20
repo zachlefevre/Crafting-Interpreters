@@ -36,6 +36,7 @@ object Interpreter {
   case class Environment(state: Map[Token.IDENTIFIER, Object]) {
     def success(ob: Object) = Success(ob, this)
     def add(key: Token.IDENTIFIER, value: Object) = Environment(state + (key -> value))
+    def merge(other: Environment) = Environment(state ++ other.state)
     def apply(key: Token.IDENTIFIER) = state.get(key)
   }
   object Environment {
@@ -53,7 +54,13 @@ object Interpreter {
   }
   case class Success(ob: Object, environment: Environment) extends Execution {
     override def map(fn: Object => Object): Execution = Success(fn(ob), environment)
-    def flatMap(fn: Object => Execution): Execution = fn(ob)
+    def flatMap(fn: Object => Execution): Execution = {
+      fn(ob) match {
+        case Success(ob, env) => Success(ob, env.merge(env))
+        case n => n
+      }
+
+    }
   }
   case class Failure(err: RError) extends Execution {
     override def map(fn: Object => Object): Execution = this

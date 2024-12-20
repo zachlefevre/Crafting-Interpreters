@@ -137,6 +137,17 @@ case class Parser(tokens: List[lexer.Token]) {
     }
   }
 
+/*  def assignment(state: State): (ParseToken.Assignment, State) =
+    equality(state) match {
+      case (lhs, state) =>
+        tokenAt(state) match {
+          case Some(lexer.Token.EQUAL(_)) =>
+            ParseToken.AssignmentSet(lhs)
+            print("================", lhs)
+            ???
+        }
+    }
+ */
   def expression(state: State): (ParseToken.Expression, State) = equality(state)
 
   def printStatement(state: State): (ParseToken.StatementPrint, State) = {

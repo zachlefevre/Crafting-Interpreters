@@ -33,11 +33,12 @@ object Interpreter {
     def or(other: RError) = Multiple(this, other)
   }
 
-  case class Environment(state: Map[Token.IDENTIFIER, Object]) {
+  case class Environment(state: Map[Token, Object]) {
     def success(ob: Object) = Success(ob, this)
-    def add(key: Token.IDENTIFIER, value: Object) = Environment(state + (key -> value))
+    def add(key: Token, value: Object) = Environment(state + (key -> value))
     def merge(other: Environment) = Environment(state ++ other.state)
-    def apply(key: Token.IDENTIFIER) = state.get(key)
+    def apply(key: Token) = state.get(key)
+    def contains(key: Token) = state.contains(key)
   }
   object Environment {
     def empty = Environment(Map.empty)
@@ -48,7 +49,7 @@ object Interpreter {
     def map(fn: Object => Object): Execution
     def tap(fn: Object => Unit): Execution = self.map { ob =>
       fn(ob)
-      self
+      ob
     }
     def flatMap(fn: Object => Execution): Execution
   }
@@ -71,6 +72,7 @@ object Interpreter {
   case class BinaryError(operator: Operator, left: Object, right: Object, expectedLeft: String, expectedRight: String) extends RError(s"Expected ${operator.token.lexeme}($expectedLeft, $expectedRight) but received ${operator.token.lexeme}($left, $right)")
   case class Multiple(left: RError, right: RError) extends RError(s"${left.message} or\n${right.message}")
 
+  case class VariableUndefined(variable: Token) extends RError(s"Variable $variable was undefined")
 
   def interpret(program: Program): Execution = {
     program.statements.foldLeft[Execution](Success(null.asInstanceOf[Object], Environment.empty)){ (execution, statement) =>
@@ -82,14 +84,14 @@ object Interpreter {
   }}
 
   def interpretStatement(expression: Statement, environment: Environment): Execution = expression match {
-    case StatementPrint(expression) =>
+    case Statement.Print(expression) =>
       interpretExpression(expression, environment)
         .tap(value => println(s"${Console.GREEN}~> $value${Console.RESET}"))
 
-    case StatementExpression(expression) =>
+    case Statement.SExpression(expression) =>
       interpretExpression(expression, environment)
 
-    case StatementVarDeclaration(id, expr) =>
+    case Statement.Var(id, expr) =>
       interpretStatement(expr, environment) match {
         case Success(ob, env) =>
           val newEnv = env.add(id, ob)
@@ -106,8 +108,20 @@ object Interpreter {
         case TRUE => true.asInstanceOf[Object]
         case FALSE => false.asInstanceOf[Object]
         case NIL => null
-        case LiteralIdentifier(id) => environment(id).get
       }, environment)
+      case Assignment(id, expression) =>
+        if (environment.contains(id)) {
+          interpretExpression(expression, environment) match {
+            case Success(ob, env) =>
+              val newEnv = env.add(id, ob)
+              Success(ob, newEnv)
+            case fail @ Failure(_) => fail
+          }
+        } else {
+          Failure(VariableUndefined(id))
+        }
+
+      case Variable(id) => environment(id).map(environment.success).getOrElse(Failure(VariableUndefined(id)))
       case Grouping(expr) => interpretExpression(expr, environment)
       case Unary(operator, expression) => operator match {
         case Operator(Token.MINUS(_)) => interpretExpression(expression, environment).flatMap {

@@ -9,11 +9,16 @@ object PrettyPrinterSimpleParseTree {
       strings.mkString("\n")
 
     case statement: Statement => statement match {
-      case StatementPrint(expression) => parenthesize("print", expression)
-      case StatementExpression(expression) => apply(expression)
-      case StatementVarDeclaration(identifier, expression) => s"(let $identifier ${apply(expression)})"
+      case Statement.Print(expression) => parenthesize("print", expression)
+      case Statement.SExpression(expression) => apply(expression)
+      case Statement.Var(identifier, expression) => s"(let $identifier ${apply(expression)})"
 
     }
+
+    case Assignment(identifier, expression) =>
+      s"(set $identifier ${apply(expression)})"
+    case Variable(variable) =>
+      variable.toString
     case Binary(left, operator, right) =>
       parenthesize(operator.token.lexeme, left, right)
     case Grouping(expression) =>
@@ -47,6 +52,12 @@ object PrettyPrinterParseTree {
       case StatementPrint(expression) => parenthesize("print", expression)
       case StatementExpression(expression) => apply(expression)
     }
+
+    case assign: Assignment => assign match {
+      case AssignmentSet(identifier, expression) => s"(set $identifier ${apply(expression)})"
+      case AssignmentEquality(equality) => apply(equality)
+    }
+
     case Equality(expression, expressions) => parenthesize(expression, expressions)
     case Comparison(expression, expressions) => parenthesize(expression, expressions)
     case Term(expression, expressions) => parenthesize(expression, expressions)

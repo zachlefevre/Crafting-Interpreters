@@ -137,18 +137,23 @@ case class Parser(tokens: List[lexer.Token]) {
     }
   }
 
-/*  def assignment(state: State): (ParseToken.Assignment, State) =
+  def assignment(state: State): (ParseToken.Assignment, State) = {
+    import ParseToken._
     equality(state) match {
       case (lhs, state) =>
         tokenAt(state) match {
-          case Some(lexer.Token.EQUAL(_)) =>
-            ParseToken.AssignmentSet(lhs)
-            print("================", lhs)
-            ???
+          case Some(lexer.Token.EQUAL(_)) => lhs match {
+            case Equality(Comparison(Term(Factor(UnaryPrimary(LiteralIdentifier(id)),List()),List()),List()),List()) =>
+              assignment(state.advance) match {
+                case (assign, state) => ParseToken.AssignmentSet(id, assign) -> state
+              }
+          }
+          case _ => ParseToken.AssignmentEquality(lhs) -> state
         }
     }
- */
-  def expression(state: State): (ParseToken.Expression, State) = equality(state)
+  }
+
+  def expression(state: State): (ParseToken.Expression, State) = assignment(state)
 
   def printStatement(state: State): (ParseToken.StatementPrint, State) = {
     val (toPrint, newState) = expression(state)

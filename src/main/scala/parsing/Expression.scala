@@ -39,6 +39,7 @@ object ParseToken {
   case object TRUE extends Primary
   case object FALSE extends Primary
   case object NIL extends Primary
+  case class LiteralIdentifier(id: lexer.Token.IDENTIFIER) extends Primary
   case class Grouping(expression: Expression) extends Primary
 
   def simplified(expression: ParseToken): ExpressionSimplified.Program = expression match {
@@ -76,6 +77,7 @@ object ParseToken {
       case TRUE => ExpressionSimplified.TRUE
       case FALSE => ExpressionSimplified.FALSE
       case NIL => ExpressionSimplified.NIL
+      case LiteralIdentifier(id) => ExpressionSimplified.LiteralIdentifier(id)
       case Grouping(expression) =>
         ExpressionSimplified.Grouping(simplifiedExpression(expression))
     }
@@ -107,5 +109,6 @@ object ExpressionSimplified {
   case object TRUE extends Literal
   case object FALSE extends Literal
   case object NIL extends Literal
+  case class LiteralIdentifier(id: lexer.Token.IDENTIFIER) extends Literal
   case class Unary(operator: Operator, expression: Expression) extends Expression
 }

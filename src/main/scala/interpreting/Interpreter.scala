@@ -32,129 +32,162 @@ object Interpreter {
   abstract class RError(val message: String) extends Exception(message) {
     def or(other: RError) = Multiple(this, other)
   }
+
+  case class Environment(state: Map[Token.IDENTIFIER, Object]) {
+    def success(ob: Object) = Success(ob, this)
+    def add(key: Token.IDENTIFIER, value: Object) = Environment(state + (key -> value))
+    def apply(key: Token.IDENTIFIER) = state.get(key)
+  }
+  object Environment {
+    def empty = Environment(Map.empty)
+  }
+
+
+  sealed trait Execution { self =>
+    def map(fn: Object => Object): Execution
+    def tap(fn: Object => Unit): Execution = self.map { ob =>
+      fn(ob)
+      self
+    }
+    def flatMap(fn: Object => Execution): Execution
+  }
+  case class Success(ob: Object, environment: Environment) extends Execution {
+    override def map(fn: Object => Object): Execution = Success(fn(ob), environment)
+    def flatMap(fn: Object => Execution): Execution = fn(ob)
+  }
+  case class Failure(err: RError) extends Execution {
+    override def map(fn: Object => Object): Execution = this
+    def flatMap(fn: Object => Execution): Execution = this
+  }
+
   case class TypeError(expected: String, got: Object) extends RError(s"Expected $expected but got $got")
   case class BinaryError(operator: Operator, left: Object, right: Object, expectedLeft: String, expectedRight: String) extends RError(s"Expected ${operator.token.lexeme}($expectedLeft, $expectedRight) but received ${operator.token.lexeme}($left, $right)")
   case class Multiple(left: RError, right: RError) extends RError(s"${left.message} or\n${right.message}")
 
 
-  def interpret(program: Program): Either[RError, Object] = {
-    program.statements.foreach(statement => interpretStatement(statement) match {
-      case Left(err) => return Left(err)
-      case n =>
-    })
-    Right(().asInstanceOf[Object])
-  }
+  def interpret(program: Program): Execution = {
+    program.statements.foldLeft[Execution](Success(null.asInstanceOf[Object], Environment.empty)){ (execution, statement) =>
+      execution match {
+        case fail @ Failure(err) => fail
+        case Success(ob, environment) =>
+          interpretStatement(statement, environment)
+      }
+  }}
 
-  def interpretStatement(expression: Statement): Either[RError, Object] = expression match {
+  def interpretStatement(expression: Statement, environment: Environment): Execution = expression match {
     case StatementPrint(expression) =>
-      interpretExpression(expression)
-        .map(value => println(s"${Console.GREEN}~> $value${Console.RESET}"))
-        .flatMap(_ => Right(().asInstanceOf[Object]))
+      interpretExpression(expression, environment)
+        .tap(value => println(s"${Console.GREEN}~> $value${Console.RESET}"))
 
     case StatementExpression(expression) =>
-      interpretExpression(expression)
-        .flatMap(_ => Right(().asInstanceOf[Object]))
+      interpretExpression(expression, environment)
 
-    case StatementVarDeclaration(id, expr) => interpretStatement(expr)
-
+    case StatementVarDeclaration(id, expr) =>
+      interpretStatement(expr, environment) match {
+        case Success(ob, env) =>
+          val newEnv = env.add(id, ob)
+          Success(ob, newEnv)
+        case fail @ Failure(_) => fail
+      }
   }
 
-  def interpretExpression(expression: Expression): Either[RError, Object] =
-    expression.apply[Either[RError, Object]] {
-      case l: Literal => Right(l match {
+  def interpretExpression(expression: Expression, environment: Environment): Execution =
+    expression.apply[Execution] {
+      case l: Literal => Success(l match {
         case STRING(s) => s
         case NUMBER(n) => n.asInstanceOf[Object]
         case TRUE => true.asInstanceOf[Object]
         case FALSE => false.asInstanceOf[Object]
         case NIL => null
-      })
-      case Grouping(expr) => interpretExpression(expr)
+        case LiteralIdentifier(id) => environment(id).get
+      }, environment)
+      case Grouping(expr) => interpretExpression(expr, environment)
       case Unary(operator, expression) => operator match {
-        case Operator(Token.MINUS(_)) => interpretExpression(expression).flatMap {
-          case expression if expression.isInstanceOf[Double] => Right(operate[Double, Double](- _)(expression))
-          case expression => Left(TypeError("Double", expression))
+        case Operator(Token.MINUS(_)) => interpretExpression(expression, environment).flatMap {
+          case expression if expression.isInstanceOf[Double] => environment.success(operate[Double, Double](- _)(expression))
+          case expression => Failure(TypeError("Double", expression))
         }
-        case Operator(Token.BANG(_)) => interpretExpression(expression).map(expr => !truthy(expr)).map(_.asInstanceOf[Object])
+        case Operator(Token.BANG(_)) => interpretExpression(expression, environment).map(expr => (!truthy(expr)).asInstanceOf[Object])
       }
       case Binary(left, operator, right) => operator match {
         case Operator(Token.MINUS(_)) => for {
-          l <- interpretExpression(left)
-          r <- interpretExpression(right)
+          l <- interpretExpression(left, environment)
+          r <- interpretExpression(right, environment)
           r <- (l, r) match {
-            case (l, r) if l.isInstanceOf[Double] && r.isInstanceOf[Double] =>   Right(operate[Double, Double, Double](_ - _)(l, r))
-            case (l, r) => Left(BinaryError(operator, l, r, "Double", "Double"))
+            case (l, r) if l.isInstanceOf[Double] && r.isInstanceOf[Double] =>   environment.success(operate[Double, Double, Double](_ - _)(l, r))
+            case (l, r) => Failure(BinaryError(operator, l, r, "Double", "Double"))
           }
         } yield r
 
         case Operator(Token.PLUS(_)) => for {
-          l <- interpretExpression(left)
-          r <- interpretExpression(right)
+          l <- interpretExpression(left, environment)
+          r <- interpretExpression(right, environment)
           r <- (l, r) match {
-            case (l, r) if l.isInstanceOf[String] && r.isInstanceOf[String] =>   Right(operate[String, String, String](_ + _)(l, r))
-            case (l, r) if l.isInstanceOf[Double] && r.isInstanceOf[Double] =>   Right(operate[Double, Double, Double](_ + _)(l, r))
-            case (l, r) => Left(BinaryError(operator, l, r, "Double", "Double").or(BinaryError(operator, l, r, "String", "String")))
+            case (l, r) if l.isInstanceOf[String] && r.isInstanceOf[String] =>   environment.success(operate[String, String, String](_ + _)(l, r))
+            case (l, r) if l.isInstanceOf[Double] && r.isInstanceOf[Double] =>   environment.success(operate[Double, Double, Double](_ + _)(l, r))
+            case (l, r) => Failure(BinaryError(operator, l, r, "Double", "Double").or(BinaryError(operator, l, r, "String", "String")))
           }
         } yield r
         case Operator(Token.SLASH(_)) => for {
-          l <- interpretExpression(left)
-          r <- interpretExpression(right)
+          l <- interpretExpression(left, environment)
+          r <- interpretExpression(right, environment)
           r <- (l, r) match {
-            case (l, r) if l.isInstanceOf[Double] && r.isInstanceOf[Double] && r == 0 =>   Left(BinaryError(operator, l, r, "Double", "Double - {0}"))
-            case (l, r) if l.isInstanceOf[Double] && r.isInstanceOf[Double] => Right(operate[Double, Double, Double](_ / _)(l, r))
-            case (l, r) => Left(BinaryError(operator, l, r, "Double", "Double"))
+            case (l, r) if l.isInstanceOf[Double] && r.isInstanceOf[Double] && r == 0 =>   Failure(BinaryError(operator, l, r, "Double", "Double - {0}"))
+            case (l, r) if l.isInstanceOf[Double] && r.isInstanceOf[Double] => environment.success(operate[Double, Double, Double](_ / _)(l, r))
+            case (l, r) => Failure(BinaryError(operator, l, r, "Double", "Double"))
           }
         } yield r
         case Operator(Token.STAR(_)) => for {
-          l <- interpretExpression(left)
-          r <- interpretExpression(right)
+          l <- interpretExpression(left, environment)
+          r <- interpretExpression(right, environment)
           r <- (l, r) match {
-            case (l, r) if l.isInstanceOf[Double] && r.isInstanceOf[Double] =>   Right(operate[Double, Double, Double](_ * _)(l, r))
-            case (l, r) => Left(BinaryError(operator, l, r, "Double", "Double"))
+            case (l, r) if l.isInstanceOf[Double] && r.isInstanceOf[Double] =>   environment.success(operate[Double, Double, Double](_ * _)(l, r))
+            case (l, r) => Failure(BinaryError(operator, l, r, "Double", "Double"))
           }
         } yield r
 
         case Operator(Token.GREATER(_)) => for {
-          l <- interpretExpression(left)
-          r <- interpretExpression(right)
+          l <- interpretExpression(left, environment)
+          r <- interpretExpression(right, environment)
           r <- (l, r) match {
-            case (l, r) if l.isInstanceOf[Double] && r.isInstanceOf[Double] => Right(operate[Double, Double, Boolean](_ > _)(l, r))
-            case (l, r) => Left(BinaryError(operator, l, r, "Double", "Double"))
+            case (l, r) if l.isInstanceOf[Double] && r.isInstanceOf[Double] => environment.success(operate[Double, Double, Boolean](_ > _)(l, r))
+            case (l, r) => Failure(BinaryError(operator, l, r, "Double", "Double"))
           }
         } yield r
         case Operator(Token.GREATER_EQUAL(_)) => for {
-          l <- interpretExpression(left)
-          r <- interpretExpression(right)
+          l <- interpretExpression(left, environment)
+          r <- interpretExpression(right, environment)
           r <- (l, r) match {
-            case (l, r) if l.isInstanceOf[Double] && r.isInstanceOf[Double] => Right(operate[Double, Double, Boolean](_ >= _)(l, r))
-            case (l, r) => Left(BinaryError(operator, l, r, "Double", "Double"))
+            case (l, r) if l.isInstanceOf[Double] && r.isInstanceOf[Double] => environment.success(operate[Double, Double, Boolean](_ >= _)(l, r))
+            case (l, r) => Failure(BinaryError(operator, l, r, "Double", "Double"))
           }
         } yield r
 
         case Operator(Token.LESS(_)) => for {
-          l <- interpretExpression(left)
-          r <- interpretExpression(right)
+          l <- interpretExpression(left, environment)
+          r <- interpretExpression(right, environment)
           r <- (l, r) match {
-            case (l, r) if l.isInstanceOf[Double] && r.isInstanceOf[Double] => Right(operate[Double, Double, Boolean](_ < _)(l, r))
-            case (l, r) => Left(BinaryError(operator, l, r, "Double", "Double"))
+            case (l, r) if l.isInstanceOf[Double] && r.isInstanceOf[Double] => environment.success(operate[Double, Double, Boolean](_ < _)(l, r))
+            case (l, r) => Failure(BinaryError(operator, l, r, "Double", "Double"))
           }
         } yield r
         case Operator(Token.LESS_EQUAL(_)) => for {
-          l <- interpretExpression(left)
-          r <- interpretExpression(right)
+          l <- interpretExpression(left, environment)
+          r <- interpretExpression(right, environment)
           r <- (l, r) match {
-            case (l, r) if l.isInstanceOf[Double] && r.isInstanceOf[Double] => Right(operate[Double, Double, Boolean](_ <= _)(l, r))
-            case (l, r) => Left(BinaryError(operator, l, r, "Double", "Double"))
+            case (l, r) if l.isInstanceOf[Double] && r.isInstanceOf[Double] => environment.success(operate[Double, Double, Boolean](_ <= _)(l, r))
+            case (l, r) => Failure(BinaryError(operator, l, r, "Double", "Double"))
           }
         } yield r
 
         case Operator(Token.BANG_EQUAL(_)) => for {
-          l <- interpretExpression(left)
-          r <- interpretExpression(right)
+          l <- interpretExpression(left, environment)
+          r <- interpretExpression(right, environment)
         } yield (!isEqual(left, right)).asInstanceOf[Object]
 
         case Operator(Token.EQUAL_EQUAL(_)) =>for {
-          l <- interpretExpression(left)
-          r <- interpretExpression(right)
+          l <- interpretExpression(left, environment)
+          r <- interpretExpression(right, environment)
         } yield (isEqual(left, right)).asInstanceOf[Object]
       }
     }

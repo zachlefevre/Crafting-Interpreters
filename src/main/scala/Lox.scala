@@ -46,8 +46,8 @@ object Lox extends App {
         println(s"pretty simplified ast:\t${ast.simplified.pretty}\n")
 
         val interpreted = interpreting.Interpreter.interpret(ast.simplified) match {
-          case Right(value) => s"${Console.GREEN}It Worked!\n$value${Console.RESET}"
-          case Left(error) => s"${Console.RED}It Failed :(\n${error.getMessage}${Console.RESET}"
+          case interpreting.Interpreter.Success(value, env) => s"${Console.GREEN}It Worked!\n$value -- $env${Console.RESET}"
+          case interpreting.Interpreter.Failure(error) => s"${Console.RED}It Failed :(\n${error.getMessage}${Console.RESET}"
         }
 
         println(s"interpreted:\t\t$interpreted")

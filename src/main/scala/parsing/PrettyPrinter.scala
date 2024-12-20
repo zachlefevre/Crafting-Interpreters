@@ -61,6 +61,7 @@ object PrettyPrinterParseTree {
       case TRUE => ":t"
       case FALSE => ":f"
       case NIL => ":nil"
+      case LiteralIdentifier(id) => s":${id.ident}"
       case Grouping(expression) =>
         f"G(${apply(expression)})"
     }

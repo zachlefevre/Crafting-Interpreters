@@ -33,6 +33,7 @@ case class Parser(tokens: List[lexer.Token]) {
 
       case Some(lexer.Token.NUMBER(n, _)) => ParseToken.NUMBER(n) -> state.advance
       case Some(lexer.Token.STRING(n, _)) => ParseToken.STRING(n) -> state.advance
+      case Some(id @ lexer.Token.IDENTIFIER(_, _)) => ParseToken.LiteralIdentifier(id) -> state.advance
       case Some(lexer.Token.LEFT_PAREN(_)) => expression(state.advance) match {
         case (expr, state) => tokenAt(state) match {
           case Some(lexer.Token.RIGHT_PAREN(_)) => ParseToken.Grouping(expr) -> state.advance

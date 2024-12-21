@@ -33,15 +33,45 @@ object Interpreter {
     def or(other: RError) = Multiple(this, other)
   }
 
-  case class Environment(state: Map[Token, Object]) {
+  trait Environment { self =>
+     val state: Map[Token, Object]
+
     def success(ob: Object) = Success(ob, this)
-    def add(key: Token, value: Object) = Environment(state + (key -> value))
-    def merge(other: Environment) = Environment(state ++ other.state)
-    def apply(key: Token) = state.get(key)
-    def contains(key: Token) = state.contains(key)
+    def add(key: Token, value: Object): Environment
+    def update(key: Token, value: Object): Option[Environment]
+    def merge(other: Environment): Environment
+    def apply(key: Token): Option[Object]
+    def contains(key: Token): Boolean
   }
+
+  case class Base(state: Map[Token, Object]) extends Environment {
+    override def add(key: Token, value: Object) = Base(state + (key -> value))
+    def update(key: Token, value: Object): Option[Environment] = {
+      if (contains(key)) {
+        Some(add(key, value))
+      } else None
+    }
+    def merge(other: Environment): Environment = this.copy(state ++ other.state)
+    def apply(key: Token): Option[Object] = state.get(key)
+    def contains(key: Token): Boolean = state.contains(key)
+  }
+
+
+  case class Frame(state: Map[Token, Object], parent: Environment) extends Environment {
+    def add(key: Token, value: Object): Environment = Frame(state + (key -> value), parent)
+    def update(key: Token, value: Object): Option[Environment] = {
+      if (state.contains(key)) {
+        Some(Frame(state + (key -> value), parent))
+      } else parent.update(key, value)
+    }
+    def merge(other: Environment): Environment = this.copy(state ++ other.state)
+    def apply(key: Token): Option[Object] = state.get(key) orElse parent(key)
+    def contains(key: Token): Boolean = state.contains(key) || parent.contains(key)
+  }
+
+
   object Environment {
-    def empty = Environment(Map.empty)
+    def empty = Base(Map.empty)
   }
 
 
@@ -110,16 +140,17 @@ object Interpreter {
         case NIL => null
       }, environment)
       case Assignment(id, expression) =>
-        if (environment.contains(id)) {
-          interpretExpression(expression, environment) match {
-            case Success(ob, env) =>
-              val newEnv = env.add(id, ob)
-              Success(ob, newEnv)
-            case fail @ Failure(_) => fail
-          }
-        } else {
-          Failure(VariableUndefined(id))
+        interpretExpression(expression, environment) match {
+          case Success(ob, newEnv) =>
+            environment.update(id, ob) match {
+              case Some(env) =>
+                Success(ob, env)
+              case None =>
+                Failure(VariableUndefined(id))
+            }
+          case fail @ Failure(_) => fail
         }
+
 
       case Variable(id) => environment(id).map(environment.success).getOrElse(Failure(VariableUndefined(id)))
       case Grouping(expr) => interpretExpression(expr, environment)

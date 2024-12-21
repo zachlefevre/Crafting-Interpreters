@@ -27,7 +27,18 @@ object Token {
   case class LESS(line: Int) extends Token { val lexeme = "<"}
   case class LESS_EQUAL(line: Int) extends Token { val lexeme = "<="}
 
-  case class IDENTIFIER(ident: scala.Predef.String, line: Int) extends Token { val lexeme = ident}
+  case class IDENTIFIER(ident: scala.Predef.String, line: Int) extends Token {
+    val lexeme = ident
+    override def hashCode =
+      this.ident.hashCode
+
+    override def equals(other: Any) = {
+      other match {
+        case other: IDENTIFIER => other.ident == this.ident
+        case _ => false
+      }
+    }
+  }
   case class STRING(string: scala.Predef.String, line: Int) extends Token { val lexeme = string}
   case class NUMBER(num: Double, line: Int) extends Token { val lexeme = num.toString}
 

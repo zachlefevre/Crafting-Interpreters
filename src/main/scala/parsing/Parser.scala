@@ -171,9 +171,24 @@ case class Parser(tokens: List[lexer.Token]) {
     }
   }
 
+  def block(state: State): (ParseToken.StatementBlock, State) = {
+    val (declarations, newState) = Util.unfold[ParseToken.Declaration, State](state) { state =>
+          tokenAt(state) match {
+            case Some(op @ lexer.Token.RIGHT_BRACE(_)) => None
+            case _ => Some(declaration(state))
+          }
+        }
+    ParseToken.StatementBlock(declarations) -> newState
+  }
   def statement(state: State): (ParseToken.Statement, State) = {
     tokenAt(state) match {
       case Some(lexer.Token.PRINT(_)) => printStatement(state.advance)
+      case Some(lexer.Token.LEFT_BRACE(_)) => block(state.advance) match {
+        case (block, state) =>
+          tokenAt(state) match {
+            case Some(lexer.Token.RIGHT_BRACE(_)) => block -> state.advance
+          }
+      }
       case _ => expressionStatement(state)
     }
   }

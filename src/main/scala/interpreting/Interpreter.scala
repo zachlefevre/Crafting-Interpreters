@@ -39,9 +39,11 @@ object Interpreter {
     def success(ob: Object) = Success(ob, this)
     def add(key: Token, value: Object): Environment
     def update(key: Token, value: Object): Option[Environment]
-    def merge(other: Environment): Environment
     def apply(key: Token): Option[Object]
     def contains(key: Token): Boolean
+
+    def extend: Environment
+    def pop: Environment
   }
 
   case class Base(state: Map[Token, Object]) extends Environment {
@@ -51,9 +53,10 @@ object Interpreter {
         Some(add(key, value))
       } else None
     }
-    def merge(other: Environment): Environment = this.copy(state ++ other.state)
     def apply(key: Token): Option[Object] = state.get(key)
     def contains(key: Token): Boolean = state.contains(key)
+    def extend: Environment = Frame(Map.empty, this)
+    def pop: Environment = ???
   }
 
 
@@ -62,11 +65,12 @@ object Interpreter {
     def update(key: Token, value: Object): Option[Environment] = {
       if (state.contains(key)) {
         Some(Frame(state + (key -> value), parent))
-      } else parent.update(key, value)
+      } else parent.update(key, value).map(Frame(state, _))
     }
-    def merge(other: Environment): Environment = this.copy(state ++ other.state)
     def apply(key: Token): Option[Object] = state.get(key) orElse parent(key)
     def contains(key: Token): Boolean = state.contains(key) || parent.contains(key)
+    def extend: Environment = Frame(Map.empty, this)
+    def pop: Environment = parent
   }
 
 
@@ -86,11 +90,7 @@ object Interpreter {
   case class Success(ob: Object, environment: Environment) extends Execution {
     override def map(fn: Object => Object): Execution = Success(fn(ob), environment)
     def flatMap(fn: Object => Execution): Execution = {
-      fn(ob) match {
-        case Success(ob, env) => Success(ob, env.merge(env))
-        case n => n
-      }
-
+      fn(ob)
     }
   }
   case class Failure(err: RError) extends Execution {
@@ -127,6 +127,18 @@ object Interpreter {
           val newEnv = env.add(id, ob)
           Success(ob, newEnv)
         case fail @ Failure(_) => fail
+      }
+
+    case Statement.Block(expressions) =>
+      val newEnvironment = environment.extend
+      expressions.foldLeft[Execution](newEnvironment.success(().asInstanceOf[Object])) { case (previous, expression) =>
+        previous match {
+          case Success(value, env) => interpretStatement(expression, env)
+          case fail => fail
+        }
+      } match {
+        case Success(value, env) => Success(value, env.pop)
+        case fail => fail
       }
   }
 

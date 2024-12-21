@@ -12,7 +12,7 @@ object PrettyPrinterSimpleParseTree {
       case Statement.Print(expression) => parenthesize("print", expression)
       case Statement.SExpression(expression) => apply(expression)
       case Statement.Var(identifier, expression) => s"(let $identifier ${apply(expression)})"
-
+      case Statement.Block(expressions) => s"{\n${expressions.map(apply).mkString("\n")}\n}"
     }
 
     case Assignment(identifier, expression) =>
@@ -51,6 +51,7 @@ object PrettyPrinterParseTree {
     case statement: Statement => statement match {
       case StatementPrint(expression) => parenthesize("print", expression)
       case StatementExpression(expression) => apply(expression)
+      case StatementBlock(expressions) => s"{\n${expressions.map(apply).mkString("\n")}\n}"
     }
 
     case assign: Assignment => assign match {

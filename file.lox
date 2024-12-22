@@ -1,0 +1,18 @@
+var i = 0;
+var start = clock();
+while(i <= 1000) {
+  print i;
+  i = i + 1;
+}
+print clock() - start;
+
+
+var f = (fun() {
+var i = 0;
+var start = clock();
+while(i <= 1000) {
+  print i;
+  i = i + 1;
+}
+print clock() - start;
+})();

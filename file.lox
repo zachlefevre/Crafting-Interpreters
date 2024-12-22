@@ -1,21 +1,27 @@
-var foo = fun (initial, updateBy) {
+var makeAccumulator = fun (initial, updateBy) {
   var c = initial;
 
-  var bar = fun () {
+  var accumulate = fun (doAccumulate) {
     print c;
-    if c {
+    if doAccumulate {
       c = c * updateBy;
+      accumulate;
     } else {
-      c = 1;
+      c;
     }
-    bar;
   };
 };
 
-var updater = foo(10, 2);
+var updater = makeAccumulator(10, 2);
 
 
-updater()()()()()()()()()()()();
+updater(1)(1)(1)(1);
+print "the final accumulated value is";
+print updater(nil);
+
+updater(1)(1)(1)(1);
+print "the final accumulated value is";
+print updater(nil);
 
 var recur = fun(i, r) {
   if (i <= 0) {

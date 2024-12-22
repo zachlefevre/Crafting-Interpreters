@@ -185,6 +185,15 @@ case class Parser(tokens: List[lexer.Token]) {
 
   def expression(state: State): (ParseToken.Expression, State) = assignment(state)
 
+  def whileStatement(state: State): (ParseToken.StatementWhile, State) = {
+    expression(state) match {
+      case (cond, state) =>
+        statement(state) match {
+          case (stmt, state) => ParseToken.StatementWhile(cond, stmt) -> state
+        }
+    }
+  }
+
   def printStatement(state: State): (ParseToken.StatementPrint, State) = {
     val (toPrint, newState) = expression(state)
     tokenAt(newState) match {
@@ -212,6 +221,7 @@ case class Parser(tokens: List[lexer.Token]) {
   }
   def statement(state: State): (ParseToken.Statement, State) = {
     tokenAt(state) match {
+      case Some(lexer.Token.WHILE(_)) => whileStatement(state.advance)
       case Some(lexer.Token.PRINT(_)) => printStatement(state.advance)
       case Some(lexer.Token.LEFT_BRACE(_)) => block(state.advance) match {
         case (block, state) =>

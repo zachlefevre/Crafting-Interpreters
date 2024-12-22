@@ -129,6 +129,17 @@ object Interpreter {
         case fail @ Failure(_) => fail
       }
 
+    case Statement.While(cond, stmt) => {
+      interpretExpression(cond, environment) match {
+        case Success(ob, environment) if truthy(ob) => interpretStatement(stmt, environment) match {
+          case Success(ob, environment) => interpretStatement(expression, environment)
+          case other => other
+        case Success(ob, environment) => environment.success(null.asInstanceOf[Object])
+        }
+        case other => other
+      }
+    }
+
     case Statement.IfElse(cond, stmt1, stmt2) =>
       interpretExpression(cond, environment) match {
         case Success(ob, environment) =>

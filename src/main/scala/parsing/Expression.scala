@@ -25,6 +25,7 @@ object ParseToken {
   case class StatementExpression(expression: Expression) extends Statement
   case class StatementBlock(declarations: List[Declaration]) extends Statement
   case class StatementIfElse(cond: Expression, ifStatement: Statement, elseStatement: Statement) extends Statement
+  case class StatementWhile(cond: Expression, body: Statement) extends Statement
 
   sealed trait Expression extends ParseToken
 
@@ -77,6 +78,7 @@ object ParseToken {
     case StatementPrint(expression) => ExpressionSimplified.Statement.Print(simplifiedExpression(expression))
     case StatementBlock(statements) => ExpressionSimplified.Statement.Block(statements.map(simplifiedDeclaration))
     case StatementIfElse(cond, stmt1, stmt2) => ExpressionSimplified.Statement.IfElse(simplifiedExpression(cond), simplifiedStatement(stmt1), simplifiedStatement(stmt2))
+    case StatementWhile(cond, stmt) => ExpressionSimplified.Statement.While(simplifiedExpression(cond), simplifiedStatement(stmt))
 }
 
   def simplifiedExpression(left: Expression, expressions: List[(Operator, Expression)]): ExpressionSimplified.Expression = expressions match {
@@ -147,6 +149,7 @@ object ExpressionSimplified {
     case class Var(identifier: lexer.Token.IDENTIFIER, expression: Statement.SExpression) extends Statement
     case class Block(declarations: List[Statement]) extends Statement
     case class IfElse(cond: Expression, ifStatement: Statement, elseStatement: Statement) extends Statement
+    case class While(cond: Expression, body: Statement) extends Statement
   }
 
   sealed trait Expression extends ParseToken

@@ -30,6 +30,18 @@ object PrettyPrinterSimpleParseTree {
     case literal: Literal => literal.toString
     case Unary(operator, expression) =>
       parenthesize(operator.token.lexeme, expression)
+
+    case Func(parameters, block) => {
+      val params = parameters.map(_.ident).mkString(" ")
+      s"λ (${params}) ${apply(block)}"
+    }
+
+    case Call(expression, arguments) =>
+      val args = arguments match {
+        case Nil => "<empty>"
+        case nonEmpty => nonEmpty.map(apply).mkString(" ")
+      }
+      s"(apply ${apply(expression)} ${args})"
   }
 
   def parenthesize(name: String, exprs: Expression*) = {
@@ -65,6 +77,12 @@ object PrettyPrinterParseTree {
       case AssignmentLogicalOr(logicalOr) => apply(logicalOr)
     }
 
+    case Func(parameters, block) => {
+      val params = parameters.map(_.ident).mkString(" ")
+      s"λ (${params}) ${apply(block)}"
+    }
+
+
     case LogicalOr(logicalAnd, logicalAnds) =>
       val others = {logicalAnds.map(apply).mkString(" ")}
       s"(OR ${apply(logicalAnd)} ${others})"
@@ -78,6 +96,9 @@ object PrettyPrinterParseTree {
     case unary: Unary => unary match {
       case UnaryPrimary(primary) => apply(primary)
       case UnaryOperator(operator, primary) => s"${operator.token.lexeme}${apply(primary)}"
+      case UnaryCall(expression, arguments) =>
+        val args = arguments.map(_.map(apply).getOrElse("(<empty>)")).mkString("")
+        s"(${apply(expression)} ${args})"
     }
     case primary: Primary => primary match {
       case NUMBER(int) => int.toString
@@ -90,6 +111,13 @@ object PrettyPrinterParseTree {
         f"G(${apply(expression)})"
     }
   }
+
+  def apply(expression: Arguments): String =
+    expression match {
+      case Arguments(argument, arguments) =>
+        val args = arguments.map(apply).mkString(" ")
+        s"(${apply(argument)} ${args}"
+    }
 
   def parenthesize(name: String, exprs: Expression*) = {
     val subExprs: Seq[String] = exprs.map(apply)

@@ -29,6 +29,9 @@ object ParseToken {
 
   sealed trait Expression extends ParseToken
 
+  case class Func(args: List[lexer.Token.IDENTIFIER], body: StatementBlock) extends Expression
+
+
   sealed trait Assignment extends Expression
   case class AssignmentSet(identifier: lexer.Token.IDENTIFIER, expression: Assignment) extends Assignment
   case class AssignmentLogicalOr(logicalOr: LogicalOr)  extends Assignment
@@ -42,9 +45,12 @@ object ParseToken {
   case class Factor(expression: Unary, expressions: List[(Operator, Unary)]) extends Expression
 
 
+  case class Arguments(argument: Expression, arguments: List[Expression])
+
   sealed trait Unary extends Expression
   case class UnaryPrimary(primary: Primary) extends Unary
   case class UnaryOperator(operator: Operator, unary: Unary) extends Unary
+  case class UnaryCall(callee: Primary, arguments: List[Option[Arguments]]) extends Unary
   sealed trait Primary extends Expression
   case class NUMBER(int: Double) extends Primary
   case class STRING(s: String) extends Primary
@@ -104,7 +110,38 @@ object ParseToken {
     case LogicalOr(logicalAnd, logicalAnds) => simplifiedLogicalOr(logicalAnd, logicalAnds)
   }
 
+  def simplifiedArgument(expression: Option[Arguments]): List[ExpressionSimplified.Expression] = {
+    expression match {
+      case Some(Arguments(argument, arguments)) =>
+        val result = simplifiedExpression(argument) :: arguments.map(simplifiedExpression)
+        if (result.length >= 255) throw new IllegalArgumentException("Functions can only accept a maximum of 254 arguments") else result
+      case None => List.empty
+    }
+  }
+
+
+  def formCallee(callee: ExpressionSimplified.Expression, arguments: List[List[ExpressionSimplified.Expression]]): ExpressionSimplified.Call = {
+    callee match {
+      case callee @ ExpressionSimplified.Call(_, _) =>
+          arguments match {
+            case Nil => callee
+            case args :: rest => formCallee(ExpressionSimplified.Call(callee, args), rest)
+          }
+      case ex: ExpressionSimplified.Expression =>
+          arguments match {
+            case Nil =>
+              ExpressionSimplified.Call(ex, List.empty)
+            case args :: rest =>
+              formCallee(ExpressionSimplified.Call(ex, args), rest)
+          }
+    }
+  }
+
   def simplifiedExpression(expression: Expression): ExpressionSimplified.Expression = expression match {
+    case Func(args, StatementBlock(statements)) =>
+      val blk = ExpressionSimplified.Statement.Block(statements.map(simplifiedDeclaration))
+      ExpressionSimplified.Func(args, blk)
+
     case Equality(expression, expressions) => simplifiedExpression(expression, expressions)
     case Comparison(expression, expressions) => simplifiedExpression(expression, expressions)
     case Term(expression, expressions) => simplifiedExpression(expression, expressions)
@@ -118,6 +155,8 @@ object ParseToken {
     case unary: Unary => unary match {
       case UnaryPrimary(primary) => simplifiedExpression(primary)
       case UnaryOperator(operator, primary) => ExpressionSimplified.Unary(operator, simplifiedExpression(primary))
+      case UnaryCall(callee, arguments) =>
+        formCallee(simplifiedExpression(callee), arguments.map(simplifiedArgument))
     }
     case primary: Primary => primary match {
       case NUMBER(int) => ExpressionSimplified.NUMBER(int)
@@ -169,4 +208,6 @@ object ExpressionSimplified {
   case object FALSE extends Literal
   case object NIL extends Literal
   case class Unary(operator: Operator, expression: Expression) extends Expression
+  case class Call(callee: Expression, arguments: List[Expression]) extends Expression
+  case class Func(args: List[lexer.Token.IDENTIFIER], body: Statement.Block) extends Expression
 }

@@ -44,6 +44,70 @@ case class Parser(tokens: List[lexer.Token]) {
     ParseToken.UnaryPrimary(expr) -> newState
   }
 
+  def arguments(state: State): (ParseToken.Arguments, State) = {
+    expression(state) match {
+      case (expr, state) =>
+        tokenAt(state) match {
+          case Some(lexer.Token.COMMA(_)) =>
+            val (rest, (newState, _)) = Util.unfold[ParseToken.Expression, (State, Boolean)](state.advance -> false) { case (state, done) =>
+              if (done) None else {
+                expression(state) match {
+                  case (expr, state) => tokenAt(state) match {
+                    case Some(lexer.Token.COMMA(_)) => Some(expr -> (state.advance, false))
+                    case Some(_) => Some(expr -> (state, true))
+                  }
+                }
+              }
+            }
+            ParseToken.Arguments(expr, rest) -> newState
+          case _ =>
+            ParseToken.Arguments(expr, List.empty) -> state
+        }
+    }
+  }
+
+  def argumentsOp(state: State):(Option[ParseToken.Arguments], State) = {
+    tokenAt(state) match {
+      case Some(lexer.Token.LEFT_PAREN(_)) if (tokenAt(state.advance) match {case Some(lexer.Token.RIGHT_PAREN(_)) => true; case _ => false}) =>
+        None -> state.advance.advance
+      case Some(lexer.Token.LEFT_PAREN(_)) =>
+        arguments(state.advance) match {
+          case (args, state) => tokenAt(state) match {
+            case Some(lexer.Token.RIGHT_PAREN(_)) =>
+              Some(args) -> state.advance
+          }
+        }
+    }
+  }
+
+  def argumentsList(state: State): (List[Option[ParseToken.Arguments]], State) = {
+    Util.unfold[Option[ParseToken.Arguments], State](state) { case state =>
+      tokenAt(state) match {
+        case Some(lexer.Token.LEFT_PAREN(_)) =>
+          val argOp = argumentsOp(state)
+          Some(argOp)
+        case _ => None
+      }
+    }
+  }
+
+  def call(state: State): (ParseToken.Unary, State) = {
+    primary(state) match {
+      case (prim, state) =>
+        tokenAt(state) match {
+          case Some(lexer.Token.LEFT_PAREN(_)) =>
+            prim match {
+              case ParseToken.UnaryPrimary(prim) =>
+                argumentsList(state) match {
+                  case (argsList, state) => ParseToken.UnaryCall(prim, argsList) -> state
+                }
+            }
+          case _ => prim -> state
+        }
+    }
+  }
+
+
   def unary(state: State): (ParseToken.Unary, State) = {
     tokenAt(state) match {
       case Some(op @ lexer.Token.BANG(_)) => unary(state.advance) match { case (expression, state) =>
@@ -52,7 +116,7 @@ case class Parser(tokens: List[lexer.Token]) {
       case Some(op @ lexer.Token.MINUS(_)) => unary(state.advance) match { case (expression, state) =>
         ParseToken.UnaryOperator(Operator(op), expression) -> state
       }
-      case _ => primary(state)
+      case _ => call(state)
     }
   }
 
@@ -122,18 +186,18 @@ case class Parser(tokens: List[lexer.Token]) {
 
   def equality(state: State): (ParseToken.Equality, State) = {
     comparison(state) match { case (expr, state) =>
-        val (expressions, newState) = Util.unfold[(Operator, ParseToken.Comparison), State](state) { state =>
-          tokenAt(state) match {
-            case Some(op @ lexer.Token.BANG_EQUAL(_)) => comparison(state.advance) match {
-              case (expr, state) => Some((Operator(op) -> expr, state))
-            }
-            case Some(op @ lexer.Token.EQUAL_EQUAL(_)) => comparison(state.advance) match {
-              case (expr, state) => Some((Operator(op) -> expr, state))
-            }
-            case _ => None
+      val (expressions, newState) = Util.unfold[(Operator, ParseToken.Comparison), State](state) { state =>
+        tokenAt(state) match {
+          case Some(op @ lexer.Token.BANG_EQUAL(_)) => comparison(state.advance) match {
+            case (expr, state) => Some((Operator(op) -> expr, state))
           }
+          case Some(op @ lexer.Token.EQUAL_EQUAL(_)) => comparison(state.advance) match {
+            case (expr, state) => Some((Operator(op) -> expr, state))
+          }
+          case _ => None
         }
-        ParseToken.Equality(expr, expressions) -> newState
+      }
+      ParseToken.Equality(expr, expressions) -> newState
     }
   }
 
@@ -183,7 +247,51 @@ case class Parser(tokens: List[lexer.Token]) {
     }
   }
 
-  def expression(state: State): (ParseToken.Expression, State) = assignment(state)
+  def parameters(state: State): (List[lexer.Token.IDENTIFIER], State) = {
+    tokenAt(state) match {
+      case Some(lexer.Token.LEFT_PAREN(_)) =>
+        val (identifiers, (newState, _)) = Util.unfold[lexer.Token.IDENTIFIER, (State, Boolean)](state.advance -> false) { case (state, done) =>
+          if(done) None else {
+            tokenAt(state) match {
+              case Some(identifier @ lexer.Token.IDENTIFIER(_, _)) =>
+                tokenAt(state.advance) match {
+                  case Some(lexer.Token.COMMA(_)) => Some(identifier -> (state.advance.advance -> false))
+                  case Some(_) => Some(identifier -> (state.advance -> true))
+                }
+              case _ => None
+       }
+          }
+        }
+        tokenAt(newState) match {
+          case Some(lexer.Token.RIGHT_PAREN(_)) =>
+            identifiers -> newState.advance
+        }
+
+    }
+  }
+
+  def expression(state: State): (ParseToken.Expression, State) = {
+    tokenAt(state) match {
+      case Some(lexer.Token.FUN(_)) =>
+        parameters(state.advance) match {
+          case (params, state) =>
+            tokenAt(state) match {
+              case Some(lexer.Token.LEFT_BRACE(_)) =>
+                block(state.advance) match {
+                  case (blk, state) =>
+                    tokenAt(state) match {
+                      case Some(lexer.Token.RIGHT_BRACE(_)) =>
+                        ParseToken.Func(params, blk) -> state.advance
+                    }
+                }
+            }
+
+        }
+      case _ =>
+        assignment(state)
+
+    }
+  }
 
   def whileStatement(state: State): (ParseToken.StatementWhile, State) = {
     expression(state) match {
@@ -206,17 +314,17 @@ case class Parser(tokens: List[lexer.Token]) {
     val (expr, newState) = expression(state)
     tokenAt(newState) match {
       case Some(lexer.Token.SEMICOLON(_)) => (ParseToken.StatementExpression(expr) -> newState.advance)
-      case other => ???
+      case other => throw new IllegalArgumentException(s"received $other")
     }
   }
 
   def block(state: State): (ParseToken.StatementBlock, State) = {
     val (declarations, newState) = Util.unfold[ParseToken.Declaration, State](state) { state =>
-          tokenAt(state) match {
-            case Some(op @ lexer.Token.RIGHT_BRACE(_)) => None
-            case _ => Some(declaration(state))
-          }
-        }
+      tokenAt(state) match {
+        case Some(op @ lexer.Token.RIGHT_BRACE(_)) => None
+        case _ => Some(declaration(state))
+      }
+    }
     ParseToken.StatementBlock(declarations) -> newState
   }
   def statement(state: State): (ParseToken.Statement, State) = {

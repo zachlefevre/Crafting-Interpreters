@@ -6,8 +6,17 @@ import com.lox.parsing.{ExpressionSimplified, Operator}
 import com.lox.parsing.ExpressionSimplified._
 import com.lox.lexer.Token
 
-
 object Interpreter {
+
+  case class ZoxCallable(name: String)(arity: Int, fn: (Environment, List[Object]) => Execution) {
+    def apply(environment: Environment, obs: List[Object]) = {
+      if (obs.length == arity) {
+        fn(environment, obs)
+      } else {
+        Failure(FunctionWrongArity(name, arity, obs.length))
+      }
+    }
+  }
 
   def operate[A, B](fn: (A) => B)(a: Object) =
     fn(a.asInstanceOf[A]).asInstanceOf[Object]
@@ -34,7 +43,7 @@ object Interpreter {
   }
 
   trait Environment { self =>
-     val state: Map[Token, Object]
+    val state: Map[Token, Object]
 
     def success(ob: Object) = Success(ob, this)
     def add(key: Token, value: Object): Environment
@@ -75,7 +84,9 @@ object Interpreter {
 
 
   object Environment {
-    def empty = Base(Map.empty)
+    def empty = Base(Map(
+      Token.IDENTIFIER("clock", -1) -> ZoxCallable("clock")(0, (environment, _) => environment.success((System.currentTimeMillis.toDouble).asInstanceOf[Object])).asInstanceOf[Object]
+    ))
   }
 
 
@@ -103,6 +114,9 @@ object Interpreter {
   case class Multiple(left: RError, right: RError) extends RError(s"${left.message} or\n${right.message}")
 
   case class VariableUndefined(variable: Token) extends RError(s"Variable $variable was undefined")
+  case class InvokingNonFunction(ob: Object) extends RError(s"Object $ob is not a function")
+  case class FunctionWrongArity(ob: Object, realArity: Int, mistakenArity: Int) extends RError(s"Function $ob has arity ${realArity} but was invoked with ${mistakenArity} arguments")
+
 
   def interpret(program: Program): Execution = {
     program.statements.foldLeft[Execution](Success(null.asInstanceOf[Object], Environment.empty)){ (execution, statement) =>
@@ -111,7 +125,7 @@ object Interpreter {
         case Success(ob, environment) =>
           interpretStatement(statement, environment)
       }
-  }}
+    }}
 
   def interpretStatement(expression: Statement, environment: Environment): Execution = expression match {
     case Statement.Print(expression) =>
@@ -134,7 +148,7 @@ object Interpreter {
         case Success(ob, environment) if truthy(ob) => interpretStatement(stmt, environment) match {
           case Success(ob, environment) => interpretStatement(expression, environment)
           case other => other
-        case Success(ob, environment) => environment.success(null.asInstanceOf[Object])
+          case Success(ob, environment) => environment.success(null.asInstanceOf[Object])
         }
         case other => other
       }
@@ -183,6 +197,42 @@ object Interpreter {
           case fail @ Failure(_) => fail
         }
 
+
+      case Func(params, body) =>
+        environment.success(ZoxCallable("λ")(params.length, (environment, args) => {
+          val newEnvironment = params.zip(args).foldLeft(environment.extend) { case (environment, (param, arg)) => environment.add(param, arg)}
+          interpretStatement(body, newEnvironment) match {
+            case Success(ob, env) => Success(ob, env.pop)
+            case other => other
+          }
+        }))
+
+      case Call(callee, arguments) =>
+        interpretExpression(callee, environment) match {
+          case Success(callee, environment) if callee.isInstanceOf[ZoxCallable] =>
+            val callable = callee.asInstanceOf[ZoxCallable]
+            val (executionArgs, env) = arguments.foldLeft[(List[Execution], Environment)](List.empty -> environment) { case ((list, environment), argument) =>
+              interpretExpression(argument, environment) match {
+                case succ @ Success(_, environment) => (succ :: list) -> environment
+                case fail @ Failure(_) => (fail :: list) -> environment
+              }
+            }
+            executionArgs.collectFirst {
+              case fail @ Failure(_) => fail
+            } match {
+              case Some(fail) => return fail
+              case None =>
+            }
+            val args = executionArgs.reverse.map {
+              case Success(ob, _) => ob
+            }
+
+            callable(env, args)
+          case Success(other, environment) =>
+            Failure(InvokingNonFunction(other))
+
+          case other => other
+        }
 
       case Variable(id) => environment(id).map(environment.success).getOrElse(Failure(VariableUndefined(id)))
       case Grouping(expr) => interpretExpression(expr, environment)

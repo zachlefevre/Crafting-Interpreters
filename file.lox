@@ -2,19 +2,20 @@ var foo = fun (initial, updateBy) {
   var c = initial;
 
   var bar = fun () {
+    print c;
     if c {
       c = c * updateBy;
     } else {
       c = 1;
     }
+    bar;
   };
 };
 
 var updater = foo(10, 2);
-print updater();
-print updater();
-print updater();
-print updater();
+
+
+updater()()()()()()()()()()()();
 
 var recur = fun(i, r) {
   if (i <= 0) {
@@ -26,3 +27,12 @@ var recur = fun(i, r) {
 };
 
 recur(10, recur);
+
+
+var a = "outer";
+{
+  var a = "inner";
+  print a;
+}
+
+print a;

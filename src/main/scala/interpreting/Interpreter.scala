@@ -179,7 +179,7 @@ object Interpreter {
           case fail => fail
         }
       } match {
-        case Success(value, env) => Success(value, env)
+        case Success(value, env) => Success(value, env.pop)
         case fail => fail
       }
   }

@@ -1,18 +1,17 @@
-var i = 0;
-var start = clock();
-while(i <= 1000) {
-  print i;
-  i = i + 1;
-}
-print clock() - start;
+var foo = fun (initial, updateBy) {
+  var c = initial;
 
+  var bar = fun () {
+    if c {
+      c = c * updateBy;
+    } else {
+      c = 1;
+    }
+  };
+};
 
-var f = (fun() {
-var i = 0;
-var start = clock();
-while(i <= 1000) {
-  print i;
-  i = i + 1;
-}
-print clock() - start;
-})();
+var updater = foo(10, 2);
+updater();
+updater();
+updater();
+updater();

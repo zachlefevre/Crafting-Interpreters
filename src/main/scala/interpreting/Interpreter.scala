@@ -6,14 +6,23 @@ import com.lox.parsing.{ExpressionSimplified, Operator}
 import com.lox.parsing.ExpressionSimplified._
 import com.lox.lexer.Token
 
+import scala.collection.{mutable => scm}
+
 object Interpreter {
 
-  case class ZoxCallable(name: String)(arity: Int, fn: (Environment, List[Object]) => Execution) {
-    def apply(environment: Environment, obs: List[Object]) = {
-      if (obs.length == arity) {
-        fn(environment, obs)
+  case class ZoxCallable(name: String, params: List[Token.IDENTIFIER])(ambientEnvironment: Environment, fn: Environment => Execution) {
+    def apply(args: List[Object], originalEnvironment: Environment) = {
+      if (args.length == params.length) {
+
+        val newEnvironment = ambientEnvironment.extend
+        params.zip(args).foreach { case (param, arg) => newEnvironment.add(param, arg)}
+
+        fn(newEnvironment) match {
+          case Success(ob, newEnv) => Success(ob, originalEnvironment)
+          case other => other
+        }
       } else {
-        Failure(FunctionWrongArity(name, arity, obs.length))
+        Failure(FunctionWrongArity(name, params.length, args.length))
       }
     }
   }
@@ -42,50 +51,49 @@ object Interpreter {
     def or(other: RError) = Multiple(this, other)
   }
 
-  trait Environment { self =>
-    val state: Map[Token, Object]
+  sealed trait Environment { self =>
+    val state: scm.Map[Token, Object]
 
-    def success(ob: Object) = Success(ob, this)
-    def add(key: Token, value: Object): Environment
-    def update(key: Token, value: Object): Option[Environment]
+    def success(ob: Object) = Success(ob, self)
+    def add(key: Token, value: Object) = state.update(key, value)
+    def update(key: Token, value: Object): Boolean
     def apply(key: Token): Option[Object]
     def contains(key: Token): Boolean
 
-    def extend: Environment
+    def extend: Environment = Frame(scm.Map.empty, self)
     def pop: Environment
   }
 
-  case class Base(state: Map[Token, Object]) extends Environment {
-    override def add(key: Token, value: Object) = Base(state + (key -> value))
-    def update(key: Token, value: Object): Option[Environment] = {
-      if (contains(key)) {
-        Some(add(key, value))
-      } else None
+  case class Base(state: scm.Map[Token, Object]) extends Environment {
+    def update(key: Token, value: Object): Boolean = {
+      if (state.contains(key)) {
+        this.state.update(key, value)
+        true
+      } else false
     }
     def apply(key: Token): Option[Object] = state.get(key)
     def contains(key: Token): Boolean = state.contains(key)
-    def extend: Environment = Frame(Map.empty, this)
     def pop: Environment = ???
+
   }
 
 
-  case class Frame(state: Map[Token, Object], parent: Environment) extends Environment {
-    def add(key: Token, value: Object): Environment = Frame(state + (key -> value), parent)
-    def update(key: Token, value: Object): Option[Environment] = {
+  case class Frame(state: scm.Map[Token, Object], parent: Environment) extends Environment {
+    def update(key: Token, value: Object): Boolean = {
       if (state.contains(key)) {
-        Some(Frame(state + (key -> value), parent))
-      } else parent.update(key, value).map(Frame(state, _))
+        this.state.update(key, value)
+        true
+      } else parent.update(key, value)
     }
     def apply(key: Token): Option[Object] = state.get(key) orElse parent(key)
     def contains(key: Token): Boolean = state.contains(key) || parent.contains(key)
-    def extend: Environment = Frame(Map.empty, this)
     def pop: Environment = parent
   }
 
 
   object Environment {
-    def empty = Base(Map(
-      Token.IDENTIFIER("clock", -1) -> ZoxCallable("clock")(0, (environment, _) => environment.success((System.currentTimeMillis.toDouble).asInstanceOf[Object])).asInstanceOf[Object]
+    def empty = Base(scm.Map(
+      Token.IDENTIFIER("clock", -1) -> ZoxCallable("clock", List.empty)(Base(scm.Map.empty), environment => environment.success((System.currentTimeMillis.toDouble).asInstanceOf[Object])).asInstanceOf[Object]
     ))
   }
 
@@ -138,8 +146,8 @@ object Interpreter {
     case Statement.Var(id, expr) =>
       interpretStatement(expr, environment) match {
         case Success(ob, env) =>
-          val newEnv = env.add(id, ob)
-          Success(ob, newEnv)
+          env.add(id, ob)
+          Success(ob, env)
         case fail @ Failure(_) => fail
       }
 
@@ -171,7 +179,7 @@ object Interpreter {
           case fail => fail
         }
       } match {
-        case Success(value, env) => Success(value, env.pop)
+        case Success(value, env) => Success(value, env)
         case fail => fail
       }
   }
@@ -188,24 +196,27 @@ object Interpreter {
       case Assignment(id, expression) =>
         interpretExpression(expression, environment) match {
           case Success(ob, newEnv) =>
-            environment.update(id, ob) match {
-              case Some(env) =>
-                Success(ob, env)
-              case None =>
-                Failure(VariableUndefined(id))
+            println("env", newEnv)
+            if(environment.update(id, ob)) {
+              Success(ob, environment)
+            } else {
+              Failure(VariableUndefined(id))
             }
           case fail @ Failure(_) => fail
         }
 
 
       case Func(params, body) =>
-        environment.success(ZoxCallable("λ")(params.length, (environment, args) => {
-          val newEnvironment = params.zip(args).foldLeft(environment.extend) { case (environment, (param, arg)) => environment.add(param, arg)}
-          interpretStatement(body, newEnvironment) match {
-            case Success(ob, env) => Success(ob, env.pop)
+        println()
+        println("constructing callable", params, environment)
+        val callable = ZoxCallable("λ", params)(environment, (environment) => {
+          interpretStatement(body, environment) match {
+            case Success(ob, env) => Success(ob, env)
             case other => other
           }
-        }))
+        })
+
+        environment.success(callable)
 
       case Call(callee, arguments) =>
         interpretExpression(callee, environment) match {
@@ -227,7 +238,7 @@ object Interpreter {
               case Success(ob, _) => ob
             }
 
-            callable(env, args)
+            callable(args, env)
           case Success(other, environment) =>
             Failure(InvokingNonFunction(other))
 

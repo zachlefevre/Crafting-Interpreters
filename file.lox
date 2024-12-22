@@ -11,7 +11,18 @@ var foo = fun (initial, updateBy) {
 };
 
 var updater = foo(10, 2);
-updater();
-updater();
-updater();
-updater();
+print updater();
+print updater();
+print updater();
+print updater();
+
+var recur = fun(i, r) {
+  if (i <= 0) {
+    print "done";
+  } else {
+    print i;
+    r(i - 1, r);
+  }
+};
+
+recur(10, recur);

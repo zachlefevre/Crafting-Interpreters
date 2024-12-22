@@ -196,7 +196,6 @@ object Interpreter {
       case Assignment(id, expression) =>
         interpretExpression(expression, environment) match {
           case Success(ob, newEnv) =>
-            println("env", newEnv)
             if(environment.update(id, ob)) {
               Success(ob, environment)
             } else {
@@ -207,8 +206,6 @@ object Interpreter {
 
 
       case Func(params, body) =>
-        println()
-        println("constructing callable", params, environment)
         val callable = ZoxCallable("λ", params)(environment, (environment) => {
           interpretStatement(body, environment) match {
             case Success(ob, env) => Success(ob, env)

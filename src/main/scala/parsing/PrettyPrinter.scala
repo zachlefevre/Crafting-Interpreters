@@ -16,6 +16,8 @@ object PrettyPrinterSimpleParseTree {
       case Statement.Block(expressions) => s"{\n${expressions.map(apply).mkString("\n")}\n}"
     }
 
+    case Logical(left, operator, right) =>
+      parenthesize(operator.token.lexeme, left, right)
     case Assignment(identifier, expression) =>
       s"(set $identifier ${apply(expression)})"
     case Variable(variable) =>
@@ -58,9 +60,15 @@ object PrettyPrinterParseTree {
 
     case assign: Assignment => assign match {
       case AssignmentSet(identifier, expression) => s"(set $identifier ${apply(expression)})"
-      case AssignmentEquality(equality) => apply(equality)
+      case AssignmentLogicalOr(logicalOr) => apply(logicalOr)
     }
 
+    case LogicalOr(logicalAnd, logicalAnds) =>
+      val others = {logicalAnds.map(apply).mkString(" ")}
+      s"(OR ${apply(logicalAnd)} ${others})"
+    case LogicalAnd(equality, equalities) =>
+      val others = equalities.map(apply).mkString(" ")
+      s"(AND ${apply(equality)} $others)"
     case Equality(expression, expressions) => parenthesize(expression, expressions)
     case Comparison(expression, expressions) => parenthesize(expression, expressions)
     case Term(expression, expressions) => parenthesize(expression, expressions)

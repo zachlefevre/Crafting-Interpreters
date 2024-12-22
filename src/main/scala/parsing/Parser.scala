@@ -137,18 +137,48 @@ case class Parser(tokens: List[lexer.Token]) {
     }
   }
 
+  def and(state: State): (ParseToken.LogicalAnd, State) = {
+    equality(state) match {
+      case (expr, state) =>
+        Util.unfold[ParseToken.Equality, State](state) { state =>
+          tokenAt(state) match {
+            case Some(op @ lexer.Token.AND(_)) => Some(equality(state.advance))
+            case _ => None
+          }
+        } match {
+          case (equalities, state) =>
+            ParseToken.LogicalAnd(expr, equalities) -> state
+        }
+    }
+  }
+
+  def or(state: State): (ParseToken.AssignmentLogicalOr, State) = {
+    and(state) match {
+      case (logicalAnd, state) =>
+        Util.unfold[ParseToken.LogicalAnd, State](state) { state =>
+          tokenAt(state) match {
+            case Some(op @ lexer.Token.OR(_)) => Some(and(state.advance))
+            case _ => None
+          }
+        } match {
+          case (logicalAnds, state) =>
+            ParseToken.AssignmentLogicalOr(ParseToken.LogicalOr(logicalAnd, logicalAnds)) -> state
+        }
+    }
+  }
+
   def assignment(state: State): (ParseToken.Assignment, State) = {
     import ParseToken._
-    equality(state) match {
+    or(state) match {
       case (lhs, state) =>
         tokenAt(state) match {
           case Some(lexer.Token.EQUAL(_)) => lhs match {
-            case Equality(Comparison(Term(Factor(UnaryPrimary(LiteralIdentifier(id)),List()),List()),List()),List()) =>
+            case AssignmentLogicalOr(LogicalOr(LogicalAnd(Equality(Comparison(Term(Factor(UnaryPrimary(LiteralIdentifier(id)),List()),List()),List()),List()) , List()), List())) =>
               assignment(state.advance) match {
                 case (assign, state) => ParseToken.AssignmentSet(id, assign) -> state
               }
           }
-          case _ => ParseToken.AssignmentEquality(lhs) -> state
+          case _ => lhs -> state
         }
     }
   }

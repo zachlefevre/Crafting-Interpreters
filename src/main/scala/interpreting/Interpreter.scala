@@ -182,6 +182,20 @@ object Interpreter {
         }
         case Operator(Token.BANG(_)) => interpretExpression(expression, environment).map(expr => (!truthy(expr)).asInstanceOf[Object])
       }
+      case Logical(left, operator, right) => operator match {
+        case Operator(Token.AND(_)) =>
+          interpretExpression(left, environment) match {
+            case Success(ob, environment) if truthy(ob) => interpretExpression(right, environment)
+            case success @ Success(_, environment) => success
+            case other => other
+          }
+        case Operator(Token.OR(_)) =>
+          interpretExpression(left, environment) match {
+            case success @ Success(ob, environment) if truthy(ob) => success
+            case Success(_, environment)  => interpretExpression(right, environment)
+            case other => other
+          }
+      }
       case Binary(left, operator, right) => operator match {
         case Operator(Token.MINUS(_)) => for {
           l <- interpretExpression(left, environment)

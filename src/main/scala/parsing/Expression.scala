@@ -30,7 +30,10 @@ object ParseToken {
 
   sealed trait Assignment extends Expression
   case class AssignmentSet(identifier: lexer.Token.IDENTIFIER, expression: Assignment) extends Assignment
-  case class AssignmentEquality(equality: Equality)  extends Assignment
+  case class AssignmentLogicalOr(logicalOr: LogicalOr)  extends Assignment
+
+  case class LogicalOr(logicalAnd: LogicalAnd, others: List[LogicalAnd]) extends Expression
+  case class LogicalAnd(equality: Equality, equalities: List[Equality]) extends Expression
 
   case class Equality(expression: Comparison, expressions: List[(Operator, Comparison)]) extends Expression
   case class Comparison(expression: Term, expressions: List[(Operator, Term)]) extends Expression
@@ -81,6 +84,24 @@ object ParseToken {
       case (operator, right) :: rest => ExpressionSimplified.Binary(simplifiedExpression(left), operator, simplifiedExpression(right, rest))
     }
 
+  def simplifiedLogicalAnd(equality: Equality, equalities: List[Equality]): ExpressionSimplified.Expression = equalities match {
+    case Nil => simplifiedExpression(equality)
+    case right :: rest => ExpressionSimplified.Logical(simplifiedExpression(equality), Operator(lexer.Token.AND(0)), simplifiedLogicalAnd(right, rest))
+  }
+
+  def simplifiedLogicalAnd(logicalAnd: LogicalAnd): ExpressionSimplified.Expression = logicalAnd match {
+    case LogicalAnd(equality, equalities) => simplifiedLogicalAnd(equality, equalities)
+  }
+
+  def simplifiedLogicalOr(logicalAnd: LogicalAnd, logicalAnds: List[LogicalAnd]): ExpressionSimplified.Expression = logicalAnds match {
+      case Nil => simplifiedLogicalAnd(logicalAnd)
+      case right :: rest => ExpressionSimplified.Logical(simplifiedLogicalAnd(logicalAnd), Operator(lexer.Token.OR(0)), simplifiedLogicalOr(right, rest))
+    }
+
+  def simplifiedLogicalOr(logicalOr: LogicalOr): ExpressionSimplified.Expression = logicalOr match {
+    case LogicalOr(logicalAnd, logicalAnds) => simplifiedLogicalOr(logicalAnd, logicalAnds)
+  }
+
   def simplifiedExpression(expression: Expression): ExpressionSimplified.Expression = expression match {
     case Equality(expression, expressions) => simplifiedExpression(expression, expressions)
     case Comparison(expression, expressions) => simplifiedExpression(expression, expressions)
@@ -89,7 +110,7 @@ object ParseToken {
 
     case assignment: Assignment => assignment match {
       case AssignmentSet(id, assignment) => ExpressionSimplified.Assignment(id, simplifiedExpression(assignment))
-      case AssignmentEquality(equality) => simplifiedExpression(equality)
+      case AssignmentLogicalOr(logicalOr) => simplifiedLogicalOr(logicalOr)
     }
 
     case unary: Unary => unary match {
@@ -136,6 +157,9 @@ object ExpressionSimplified {
   case class Grouping(expression: Expression) extends Expression
 
   sealed trait Literal extends Expression
+
+  case class Logical(left: Expression, token: Operator, right: Expression) extends Expression
+
   case class NUMBER(int: Double) extends Literal
   case class STRING(s: String) extends Literal
   case object TRUE extends Literal

@@ -129,6 +129,15 @@ object Interpreter {
         case fail @ Failure(_) => fail
       }
 
+    case Statement.IfElse(cond, stmt1, stmt2) =>
+      interpretExpression(cond, environment) match {
+        case Success(ob, environment) =>
+          if (truthy(ob)) {
+            interpretStatement(stmt1, environment)
+          } else interpretStatement(stmt2, environment)
+        case fail @ Failure(_) => fail
+      }
+
     case Statement.Block(expressions) =>
       val newEnvironment = environment.extend
       expressions.foldLeft[Execution](newEnvironment.success(().asInstanceOf[Object])) { case (previous, expression) =>

@@ -167,7 +167,7 @@ case class Parser(tokens: List[lexer.Token]) {
     val (expr, newState) = expression(state)
     tokenAt(newState) match {
       case Some(lexer.Token.SEMICOLON(_)) => (ParseToken.StatementExpression(expr) -> newState.advance)
-      case _ => ???
+      case other => ???
     }
   }
 
@@ -188,6 +188,15 @@ case class Parser(tokens: List[lexer.Token]) {
           tokenAt(state) match {
             case Some(lexer.Token.RIGHT_BRACE(_)) => block -> state.advance
           }
+      }
+      case Some(lexer.Token.IF(_)) => expression(state.advance) match {
+        case (expression, state) => statement(state) match {
+          case (statement1, state) => tokenAt(state) match {
+            case Some(lexer.Token.ELSE(_)) => statement(state.advance) match {
+              case (statement2, state) => ParseToken.StatementIfElse(expression, statement1, statement2) -> state
+            }
+          }
+        }
       }
       case _ => expressionStatement(state)
     }

@@ -2,4 +2,7 @@
 - [x] Expression Parsing
 - [x] Expression evaluation
 - [x] Var parsing
-- [ ] Var evaluation
+- [x] Var evaluation
+- [x] whiles
+- [x] loops
+- [x] lexical scopes

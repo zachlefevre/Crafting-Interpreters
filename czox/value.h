@@ -8,7 +8,13 @@ typedef double Value;
 typedef struct {
   int capacity;
   int count;
-  Value* value;
+  Value* values;
 } ValueArray;
+
+void initValueArray(ValueArray* values);
+void writeValueArray(ValueArray* values, Value value);
+void freeValueArray(ValueArray* values);
+void printValue(Value value);
+
 
 #endif

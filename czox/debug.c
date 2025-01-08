@@ -22,11 +22,23 @@ int constantInstruction(const char* name, Chunk* chunk, uint8_t instruction, int
 }
 
 int disassembleInstruction(Chunk* chunk, int offset) {
-  printf("offset: %04d\n", offset);
+  printf("\n");
   uint8_t instruction = chunk->code[offset];
   switch (instruction) {
   case OP_RETURN:
     return simpleInstruction("OP_RETURN", instruction, offset);
+  case OP_NEGATE:
+    return simpleInstruction("OP_NEGATE", instruction, offset);
+
+  case OP_ADD:
+    return simpleInstruction("OP_ADD", instruction, offset);
+  case OP_MULT:
+    return simpleInstruction("OP_MULT", instruction, offset);
+  case OP_DIV:
+    return simpleInstruction("OP_DIV", instruction, offset);
+  case OP_SUB:
+    return simpleInstruction("OP_SUB", instruction, offset);
+
   case OP_CONSTANT:
     return constantInstruction("OP_CONSTANT", chunk, instruction, offset);
   default:

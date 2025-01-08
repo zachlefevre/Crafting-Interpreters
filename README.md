@@ -6,3 +6,7 @@
 - [x] whiles
 - [x] loops
 - [x] lexical scopes
+- [x] C VM
+- [x] disassembler for C VM bytecode
+- [x] constants in C VM
+- [x] arithmetic operators in C VM

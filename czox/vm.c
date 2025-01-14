@@ -1,6 +1,7 @@
 #include "vm.h"
 #include "common.h"
 #include "debug.h"
+#include "compiler.h"
 
 #include <stdio.h>
 VM vm;
@@ -79,8 +80,7 @@ InterpretResult run() {
 #undef READ_CONSTANT
 }
 
-InterpretResult interpret(Chunk* chunk) {
-  vm.chunks = chunk;
-  vm.ip = vm.chunks->code;
-  return run();
+InterpretResult interpret(const char* source) {
+  compile(source);
+  return INTERPRET_OK;
 }

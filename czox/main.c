@@ -14,7 +14,7 @@ void repl() {
   for (;;) {
     printf("> ");
     if (fgets(line, sizeof(line), stdin)) {
-      //      interpret(line);
+      interpret(line);
     } else {
       printf("\n");
       break;

@@ -159,7 +159,7 @@ Token identifier() {
   makeToken(identifierType());
 }
 
-Token number() {
+Token num() {
   while (isDigit(peek())) advance();
   if (peek() == '.' && isDigit(peekNext())) {
     advance();
@@ -176,7 +176,7 @@ Token scanToken() {
   char c = advance();
 
   if(isAlpha(c)) return identifier();
-  if(isDigit(c)) return number();
+  if(isDigit(c)) return num();
 
 
   switch (c) {

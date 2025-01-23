@@ -12,6 +12,20 @@ typedef struct {
   bool panicMode;
 } Parser;
 
+typedef enum {
+  PREC_NONE,
+  PREC_ASSIGNMENT,  // =
+  PREC_OR,          // or
+  PREC_AND,         // and
+  PREC_EQUALITY,    // == !=
+  PREC_COMPARISON,  // < > <= >=
+  PREC_TERM,        // + -
+  PREC_FACTOR,      // * /
+  PREC_UNARY,       // ! -
+  PREC_CALL,        // . ()
+  PREC_PRIMARY
+} Precedence;
+
 Parser parser;
 Chunk* compilingChunk;
 
@@ -80,8 +94,39 @@ static void endCompiler() {
   emitReturn();
 }
 
+static uint8_t makeConstant(Value value) {
+  int constant = addConstant(currentChunk(), value);
+  return (uint8_t)constant;
+}
+
+static void emitConstant(Value value) {
+  emitBytes(OP_CONSTANT, makeConstant(value));
+}
+
 void expression() {
-  
+  parsePrecedence(PREC_ASSIGNMENT);
+
+}
+
+
+void number() {
+  double value = strtod(parser.previous.start, NULL);
+  emitConstant(value);
+}
+
+void grouping() {
+  expression();
+  consume(TOKEN_RIGHT_PAREN, "Expected ')' after expression.");
+}
+
+void unary() {
+  TokenType type = parser.previous.type;
+  parsePrecedence(PREC_UNARY);
+
+  switch (type) {
+  case TOKEN_MINUS: emitByte(OP_NEGATE); break;
+  default: return;
+  }
 }
 
 bool compile(const char* source, Chunk* chunk) {

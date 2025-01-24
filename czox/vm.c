@@ -33,10 +33,10 @@ InterpretResult run() {
 #define READ_CONSTANT() (vm.chunks->constants.values[READ_BYTE()])
 
 #define BINARY_OP(op) do \
-    { \
-    double b = pop(); \
-    double a = pop(); \
-    push(a op b); \
+    {                                           \
+      double b = AS_NUMBER(pop());              \
+      double a = AS_NUMBER(pop());              \
+      push(NUMBER_VAL(a op b));                 \
     } while (false)
 
   for(;;) {
@@ -60,7 +60,7 @@ InterpretResult run() {
       return INTERPRET_OK;
     }
     case OP_NEGATE: {
-      push(-pop());
+      push(NUMBER_VAL(-AS_NUMBER(pop())));
       break;
     }
     case OP_CONSTANT: {
